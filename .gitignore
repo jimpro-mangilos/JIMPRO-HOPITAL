@@ -1,10 +1,9 @@
-
-
 # Dépendances
 node_modules/
 
 # Build
 dist/
+build/
 
 # Bases de données
 *.db
@@ -19,8 +18,11 @@ dist/
 .DS_Store
 .codewhale/
 
+# Uploads
+uploads/
 
-
-# Environnement (contient les secrets)
-.env
-.env.local
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
