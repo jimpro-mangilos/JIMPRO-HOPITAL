@@ -1,91 +1,68 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
-import type { User } from '@supabase/supabase-js';
-
-interface StaffInfo {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  avatarUrl?: string;
-  speciality?: string;
-  department?: string;
-}
 
 interface AppUser {
   id: string;
   email: string;
   role: string;
-  staff?: StaffInfo;
+  staff?: any;
 }
 
 interface AuthState {
   user: AppUser | null;
-  session: any;
   isAuthenticated: boolean;
   isLoading: boolean;
-  setUser: (user: AppUser | null) => void;
   logout: () => Promise<void>;
   initialize: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  session: null,
   isAuthenticated: false,
   isLoading: true,
 
-  setUser: (user: AppUser | null) => {
-    set({ user, isAuthenticated: !!user });
-  },
-
   logout: async () => {
+    console.log('[AUTH] logout');
     await supabase.auth.signOut();
-    set({ user: null, session: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false });
   },
 
-  initialize: async () => {
-    set({ isLoading: true });
+  initialize: () => {
+    console.log('[AUTH] initialize');
 
-    // Écouter les changements d'auth Supabase
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        try {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('*, staff(*)')
-            .eq('id', session.user.id)
-            .single();
-
-          if (userData) {
-            set({ user: userData as AppUser, session, isAuthenticated: true, isLoading: false });
-            return;
-          }
-        } catch (_) {
-          // RLS might block, fallback to basic user from session
-        }
-        // Fallback: use session user directly
+    // 1. Quick scan: do we have a session right now?
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[AUTH] getSession result:', !!session);
+      if (session) {
         set({
           user: { id: session.user.id, email: session.user.email || '', role: 'ACCUEIL' },
-          session,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        // Async: enrich with staff later (fire-and-forget)
+        Promise.resolve().then(async () => {
+          try {
+            const { data } = await supabase.from('users').select('*, staff(*)').eq('id', session.user.id).single();
+            if (data) { console.log('[AUTH] profile loaded'); set({ user: data as AppUser }); }
+          } catch (_) {}
+        });
+      } else {
+        set({ isLoading: false });
+      }
+    });
+
+    // 2. Listen for changes
+    supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('[AUTH] onAuthStateChange:', _event, !!session);
+      if (session?.user) {
+        set({
+          user: { id: session.user.id, email: session.user.email || '', role: 'ACCUEIL' },
           isAuthenticated: true,
           isLoading: false,
         });
       } else {
-        set({ user: null, session: null, isAuthenticated: false, isLoading: false });
+        set({ user: null, isAuthenticated: false, isLoading: false });
       }
     });
-
-    // Vérifier la session existante (force immediate update)
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      try {
-        const { data: userData } = await supabase.from('users').select('*, staff(*)').eq('id', session.user.id).single();
-        if (userData) { set({ user: userData as AppUser, session, isAuthenticated: true, isLoading: false }); return; }
-      } catch (_) {}
-      set({ user: { id: session.user.id, email: session.user.email || '', role: 'ACCUEIL' }, session, isAuthenticated: true, isLoading: false });
-    } else {
-      set({ isLoading: false });
-    }
   },
 }));
