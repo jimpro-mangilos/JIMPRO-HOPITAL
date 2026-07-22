@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { hospitalization as hospApi, patients as patientsApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,29 +28,26 @@ export default function Hospitalization() {
 
   const { data: beds, isLoading: bedsLoading } = useQuery({
     queryKey: ['beds'],
-    queryFn: () =>
-      fetch('/api/hospitalization/beds')
-        .then((r) => r.json())
-        .then((d) => d.data || d.beds || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await hospApi.beds.list();
+      return data || [];
+    },
   });
 
   const { data: hospitalizations, isLoading: hospLoading } = useQuery({
     queryKey: ['hospitalizations'],
-    queryFn: () =>
-      fetch('/api/hospitalization')
-        .then((r) => r.json())
-        .then((d) => d.data || d.hospitalizations || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await hospApi.admissions.list();
+      return data || [];
+    },
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
-    queryFn: () =>
-      fetch('/api/patients?limit=200')
-        .then((r) => r.json())
-        .then((d) => d.data || d.patients || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await patientsApi.list(undefined, 1, 200);
+      return data || [];
+    },
   });
 
   const [admitForm, setAdmitForm] = useState({
@@ -61,12 +59,9 @@ export default function Hospitalization() {
   });
 
   const admitMutation = useMutation({
-    mutationFn: (data: typeof admitForm) =>
-      fetch('/api/hospitalization/admit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async (data: typeof admitForm) => {
+      await hospApi.admissions.admit(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hospitalizations'] });
       queryClient.invalidateQueries({ queryKey: ['beds'] });
@@ -78,12 +73,7 @@ export default function Hospitalization() {
   });
 
   const dischargeMutation = useMutation({
-    mutationFn: ({ id }: { id: string }) =>
-      fetch(`/api/hospitalization/${id}/discharge`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dischargeDate: new Date().toISOString(), status: 'SORTI' }),
-      }),
+    mutationFn: async ({ id }: { id: string }) => hospApi.admissions.discharge(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hospitalizations'] });
       queryClient.invalidateQueries({ queryKey: ['beds'] });

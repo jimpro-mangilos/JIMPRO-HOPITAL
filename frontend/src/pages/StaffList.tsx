@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { staff as staffApi } from '@/lib/supabase-api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,11 +28,10 @@ export default function StaffList() {
 
   const { data: staff, isLoading } = useQuery<Staff[]>({
     queryKey: ['staff'],
-    queryFn: () =>
-      fetch('/api/staff')
-        .then((r) => r.json())
-        .then((d) => d.data || d.staff || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await staffApi.list();
+      return data || [];
+    },
   });
 
   const departments = [...new Set((staff || []).map((s) => s.department).filter(Boolean))] as string[];

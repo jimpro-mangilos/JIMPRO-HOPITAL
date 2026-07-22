@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { patients as patientsApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,32 +74,19 @@ export default function PatientForm({ patient, onSuccess }: PatientFormProps) {
     setLoading(true);
 
     try {
-      const url = isEdit ? `/api/patients/${patient!.id}` : '/api/patients';
-      const method = isEdit ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Erreur');
+      if (isEdit) {
+        const { error } = await patientsApi.update(patient!.id, form);
+        if (error) throw new Error((error as any).message || 'Erreur');
+      } else {
+        const { error } = await patientsApi.create(form);
+        if (error) throw new Error((error as any).message || 'Erreur');
       }
 
       queryClient.invalidateQueries({ queryKey: ['patients'] });
-      toast({
-        title: isEdit ? 'Patient modifié' : 'Patient créé',
-        variant: 'success',
-      });
+      toast({ title: isEdit ? 'Patient modifié' : 'Patient créé', variant: 'success' });
       onSuccess();
     } catch (err) {
-      toast({
-        title: 'Erreur',
-        description: err instanceof Error ? err.message : 'Une erreur est survenue',
-        variant: 'error',
-      });
+      toast({ title: 'Erreur', description: err instanceof Error ? err.message : 'Une erreur est survenue', variant: 'error' });
     } finally {
       setLoading(false);
     }

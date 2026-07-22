@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { billing as billingApi, patients as patientsApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,22 +27,18 @@ export default function Billing() {
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ['invoices', statusFilter],
-    queryFn: () => {
-      const params = statusFilter ? `?status=${statusFilter}` : '';
-      return fetch(`/api/billing${params}`)
-        .then((r) => r.json())
-        .then((d) => d.data || d.invoices || [])
-        .catch(() => []);
+    queryFn: async () => {
+      const { data } = await billingApi.invoices.list(statusFilter || undefined);
+      return data || [];
     },
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
-    queryFn: () =>
-      fetch('/api/patients?limit=200')
-        .then((r) => r.json())
-        .then((d) => d.data || d.patients || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await patientsApi.list(undefined, 1, 200);
+      return data || [];
+    },
   });
 
   const [form, setForm] = useState({
@@ -53,16 +50,13 @@ export default function Billing() {
   const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'ESPECES' });
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      fetch('/api/billing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          lines: form.lines.map((l) => ({ ...l, amount: l.quantity * l.unitPrice })),
-          totalAmount: form.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0),
-        }),
-      }),
+    mutationFn: async () => {
+      await billingApi.invoices.create({
+        ...form,
+        lines: form.lines.map((l) => ({ ...l, amount: l.quantity * l.unitPrice })),
+        totalAmount: form.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({ title: 'Facture créée', variant: 'success' });
@@ -72,12 +66,8 @@ export default function Billing() {
   });
 
   const paymentMutation = useMutation({
-    mutationFn: ({ id, amount, method }: { id: string; amount: number; method: string }) =>
-      fetch(`/api/billing/${id}/payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, paymentMethod: method }),
-      }),
+    mutationFn: async ({ id, amount, method }: { id: string; amount: number; method: string }) =>
+      billingApi.invoices.recordPayment(id, amount, method),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({ title: 'Paiement enregistré', variant: 'success' });

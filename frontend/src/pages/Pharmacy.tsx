@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { pharmacy as pharmacyApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,20 +27,18 @@ export default function Pharmacy() {
 
   const { data: medications, isLoading } = useQuery({
     queryKey: ['medications'],
-    queryFn: () =>
-      fetch('/api/pharmacy/medications')
-        .then((r) => r.json())
-        .then((d) => d.data || d.medications || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await pharmacyApi.medications.list();
+      return data || [];
+    },
   });
 
   const { data: stocks } = useQuery({
     queryKey: ['pharmacy-stocks'],
-    queryFn: () =>
-      fetch('/api/pharmacy/stock')
-        .then((r) => r.json())
-        .then((d) => d.data || d.stocks || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await pharmacyApi.stock.list();
+      return data || [];
+    },
   });
 
   const [form, setForm] = useState({
@@ -55,12 +54,9 @@ export default function Pharmacy() {
   const [adjQty, setAdjQty] = useState('');
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof form) =>
-      fetch('/api/pharmacy/medications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, unitPrice: parseFloat(data.unitPrice) || 0 }),
-      }),
+    mutationFn: async (data: typeof form) => {
+      await pharmacyApi.medications.create({ ...data, unitPrice: parseFloat(data.unitPrice) || 0 });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['medications'] });
       toast({ title: 'Médicament ajouté', variant: 'success' });
@@ -70,12 +66,8 @@ export default function Pharmacy() {
   });
 
   const stockMutation = useMutation({
-    mutationFn: ({ id, quantity }: { id: string; quantity: number }) =>
-      fetch(`/api/pharmacy/stock/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity }),
-      }),
+    mutationFn: async ({ id, quantity }: { id: string; quantity: number }) =>
+      pharmacyApi.stock.update(id, quantity),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-stocks'] });
       toast({ title: 'Stock mis à jour', variant: 'success' });

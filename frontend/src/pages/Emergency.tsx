@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { emergency as emergApi, staff as staffApi, patients as patientsApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,29 +39,26 @@ export default function Emergency() {
 
   const { data: visits, isLoading } = useQuery({
     queryKey: ['emergency-visits'],
-    queryFn: () =>
-      fetch('/api/emergency')
-        .then((r) => r.json())
-        .then((d) => d.data || d.emergencyVisits || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await emergApi.visits.list();
+      return data || [];
+    },
   });
 
   const { data: doctors } = useQuery({
     queryKey: ['staff', 'doctors'],
-    queryFn: () =>
-      fetch('/api/staff?role=MEDECIN')
-        .then((r) => r.json())
-        .then((d) => d.data || d.staff || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await staffApi.getDoctors();
+      return data || [];
+    },
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
-    queryFn: () =>
-      fetch('/api/patients?limit=200')
-        .then((r) => r.json())
-        .then((d) => d.data || d.patients || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await patientsApi.list(undefined, 1, 200);
+      return data || [];
+    },
   });
 
   const [form, setForm] = useState({
@@ -72,12 +70,9 @@ export default function Emergency() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      fetch('/api/emergency', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      }),
+    mutationFn: async () => {
+      await emergApi.visits.create(form);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['emergency-visits'] });
       toast({ title: 'Visite urgente créée', variant: 'success' });
@@ -87,12 +82,8 @@ export default function Emergency() {
   });
 
   const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      fetch(`/api/emergency/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      }),
+    mutationFn: async ({ id, status }: { id: string; status: string }) =>
+      emergApi.visits.updateStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['emergency-visits'] });
       toast({ title: 'Statut mis à jour', variant: 'success' });

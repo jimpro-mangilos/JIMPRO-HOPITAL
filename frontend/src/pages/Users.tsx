@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { users as usersApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,11 +27,10 @@ export default function Users() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
-    queryFn: () =>
-      fetch('/api/auth/users')
-        .then((r) => r.json())
-        .then((d) => d.data || d.users || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await usersApi.list();
+      return data || [];
+    },
   });
 
   const [form, setForm] = useState({
@@ -45,12 +45,9 @@ export default function Users() {
   const [newRole, setNewRole] = useState('');
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      fetch('/api/auth/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      }),
+    mutationFn: async () => {
+      await usersApi.create(form);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: 'Utilisateur créé', variant: 'success' });
@@ -60,12 +57,8 @@ export default function Users() {
   });
 
   const roleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: string }) =>
-      fetch(`/api/auth/users/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role }),
-      }),
+    mutationFn: async ({ id, role }: { id: string; role: string }) =>
+      usersApi.updateRole(id, role),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: 'Rôle modifié', variant: 'success' });

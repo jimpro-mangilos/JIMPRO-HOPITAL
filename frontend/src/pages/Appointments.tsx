@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { appointments as appointmentsApi, staff as staffApi, patients as patientsApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -30,34 +31,29 @@ export default function Appointments() {
 
   const { data: appointments, isLoading } = useQuery({
     queryKey: ['appointments', selectedDate, statusFilter, doctorFilter],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (selectedDate) params.set('date', selectedDate);
-      if (statusFilter) params.set('status', statusFilter);
-      if (doctorFilter) params.set('staffId', doctorFilter);
-      return fetch(`/api/appointments?${params.toString()}`)
-        .then((r) => r.json())
-        .then((d) => d.data || d.appointments || [])
-        .catch(() => []);
+    queryFn: async () => {
+      const { data, error } = await appointmentsApi.list(selectedDate || undefined, statusFilter || undefined);
+      if (error) return [];
+      // Client-side filter for doctorFilter since the API doesn't support it directly
+      if (doctorFilter && data) return data.filter((a: any) => a.staffId === doctorFilter);
+      return data || [];
     },
   });
 
   const { data: doctors } = useQuery({
     queryKey: ['staff', 'doctors'],
-    queryFn: () =>
-      fetch('/api/staff?role=MEDECIN')
-        .then((r) => r.json())
-        .then((d) => d.data || d.staff || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await staffApi.getDoctors();
+      return data || [];
+    },
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
-    queryFn: () =>
-      fetch('/api/patients?limit=200')
-        .then((r) => r.json())
-        .then((d) => d.data || d.patients || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await patientsApi.list(undefined, 1, 200);
+      return data || [];
+    },
   });
 
   const [newAppt, setNewAppt] = useState({
@@ -72,12 +68,9 @@ export default function Appointments() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof newAppt) =>
-      fetch('/api/appointments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async (data: typeof newAppt) => {
+      await appointmentsApi.create(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       toast({ title: 'Rendez-vous créé', variant: 'success' });
@@ -88,12 +81,8 @@ export default function Appointments() {
   });
 
   const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      fetch(`/api/appointments/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      }),
+    mutationFn: async ({ id, status }: { id: string; status: string }) =>
+      appointmentsApi.updateStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       toast({ title: 'Statut mis à jour', variant: 'success' });

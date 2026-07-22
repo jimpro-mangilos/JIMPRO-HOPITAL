@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { dashboard, patients as patientsApi, appointments as appointmentsApi } from '@/lib/supabase-api';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -67,46 +68,46 @@ const defaultStats: DashboardStats = {
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['dashboard', 'stats'],
-    queryFn: () =>
-      fetch('/api/dashboard/stats')
-        .then((r) => r.json())
-        .catch(() => defaultStats),
+    queryFn: async () => {
+      const { data, error } = await dashboard.stats();
+      if (error) return defaultStats;
+      return (data as any)?.[0] || defaultStats;
+    },
   });
 
   const { data: recentPatients, isLoading: patientsLoading } = useQuery<Patient[]>({
     queryKey: ['dashboard', 'recent-patients'],
-    queryFn: () =>
-      fetch('/api/patients?limit=5&sortBy=createdAt&order=desc')
-        .then((r) => r.json())
-        .then((d) => d.data || d.patients || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await patientsApi.list(undefined, 1, 5);
+      return data || [];
+    },
   });
 
   const { data: upcomingAppointments, isLoading: appointmentsLoading } = useQuery<Appointment[]>({
     queryKey: ['dashboard', 'upcoming-appointments'],
-    queryFn: () =>
-      fetch('/api/appointments?status=PROGRAMME,CONFIRME&limit=5&sortBy=date&order=asc')
-        .then((r) => r.json())
-        .then((d) => d.data || d.appointments || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await appointmentsApi.list(undefined, 'PROGRAMME');
+      const { data: confirmedData } = await appointmentsApi.list(undefined, 'CONFIRME');
+      return [...(data || []), ...(confirmedData || [])].slice(0, 5);
+    },
   });
 
   const { data: appointmentChart } = useQuery({
     queryKey: ['dashboard', 'appointment-chart'],
-    queryFn: () =>
-      fetch('/api/dashboard/appointment-stats?days=7')
-        .then((r) => r.json())
-        .then((d) => d.data || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data, error } = await dashboard.appointmentChart(7);
+      if (error) return [];
+      return data || [];
+    },
   });
 
   const { data: revenueChart } = useQuery({
     queryKey: ['dashboard', 'revenue-chart'],
-    queryFn: () =>
-      fetch('/api/dashboard/revenue-stats?days=30')
-        .then((r) => r.json())
-        .then((d) => d.data || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data, error } = await dashboard.revenueChart(30);
+      if (error) return [];
+      return data || [];
+    },
   });
 
   const s = stats || defaultStats;

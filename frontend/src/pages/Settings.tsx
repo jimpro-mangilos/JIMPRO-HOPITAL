@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -32,18 +33,21 @@ export default function Settings() {
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
 
   const updateProfile = useMutation({
-    mutationFn: () =>
-      fetch(`/api/auth/users/${user?.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profileForm),
-      }),
+    mutationFn: async () => {
+      if (!user?.staff?.id) throw new Error('No staff profile');
+      const { error } = await supabase.from('staff').update({
+        firstName: profileForm.firstName,
+        lastName: profileForm.lastName,
+        phone: profileForm.phone,
+      }).eq('id', user.staff.id);
+      if (error) throw error;
+    },
     onSuccess: () => toast({ title: 'Profil mis à jour', variant: 'success' }),
     onError: () => toast({ title: 'Erreur', description: 'Impossible de mettre à jour le profil', variant: 'error' }),
   });
 
   const changePassword = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const errs: Record<string, string> = {};
       if (!passwordForm.currentPassword) errs.currentPassword = 'Requis';
       if (!passwordForm.newPassword) errs.newPassword = 'Requis';
@@ -51,14 +55,11 @@ export default function Settings() {
       if (passwordForm.newPassword.length < 6) errs.newPassword = 'Minimum 6 caractères';
       setPasswordErrors(errs);
       if (Object.keys(errs).length > 0) throw new Error('Validation');
-      return fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword,
-        }),
+      const { error } = await supabase.rpc('change_user_password', {
+        current_password: passwordForm.currentPassword,
+        new_password: passwordForm.newPassword,
       });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: 'Mot de passe changé', variant: 'success' });

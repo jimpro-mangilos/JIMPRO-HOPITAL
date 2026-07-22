@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { consultations as consultationsApi, patients as patientsApi, staff as staffApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -22,29 +23,26 @@ export default function Consultations() {
 
   const { data: consultations, isLoading } = useQuery({
     queryKey: ['consultations'],
-    queryFn: () =>
-      fetch('/api/consultations')
-        .then((r) => r.json())
-        .then((d) => d.data || d.consultations || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await consultationsApi.list();
+      return data || [];
+    },
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
-    queryFn: () =>
-      fetch('/api/patients?limit=200')
-        .then((r) => r.json())
-        .then((d) => d.data || d.patients || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await patientsApi.list(undefined, 1, 200);
+      return data || [];
+    },
   });
 
   const { data: doctors } = useQuery({
     queryKey: ['staff', 'doctors'],
-    queryFn: () =>
-      fetch('/api/staff?role=MEDECIN')
-        .then((r) => r.json())
-        .then((d) => d.data || d.staff || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data } = await staffApi.getDoctors();
+      return data || [];
+    },
   });
 
   const [form, setForm] = useState({
@@ -58,12 +56,9 @@ export default function Consultations() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof form) =>
-      fetch('/api/consultations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async (data: typeof form) => {
+      await consultationsApi.create(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consultations'] });
       toast({ title: 'Consultation créée', variant: 'success' });

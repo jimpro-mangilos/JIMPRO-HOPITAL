@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { patients as patientsApi } from '@/lib/supabase-api';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,25 +42,23 @@ export default function PatientsList() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['patients', search, page],
-    queryFn: () =>
-      fetch(`/api/patients?search=${search}&page=${page}&limit=${limit}`)
-        .then((r) => r.json())
-        .catch(() => ({ data: [], total: 0 })),
+    queryFn: async () => {
+      const result = await patientsApi.list(search, page, limit);
+      return { data: result.data, total: result.count || 0 };
+    },
   });
 
-  const patients = data?.data || data?.patients || [];
-  const total = data?.total || data?._count || 0;
+  const patients = data?.data || [];
+  const total = data?.total || 0;
   const totalPages = Math.ceil(total / limit);
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => fetch(`/api/patients/${id}`, { method: 'DELETE' }),
+    mutationFn: async (id: string) => patientsApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast({ title: 'Patient supprimé', variant: 'success' });
     },
-    onError: () => {
-      toast({ title: 'Erreur', description: 'Impossible de supprimer le patient', variant: 'error' });
-    },
+    onError: () => toast({ title: 'Erreur', description: 'Impossible de supprimer le patient', variant: 'error' }),
   });
 
   return (

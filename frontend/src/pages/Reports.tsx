@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { dashboard as dashApi } from '@/lib/supabase-api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -16,37 +17,37 @@ const COLORS = ['#2563eb', '#0d9488', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 export default function Reports() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['reports', 'stats'],
-    queryFn: () =>
-      fetch('/api/dashboard/stats')
-        .then((r) => r.json())
-        .catch(() => ({})),
+    queryFn: async () => {
+      const { data, error } = await dashApi.stats();
+      if (error) return {};
+      return (data as any)?.[0] || {};
+    },
   });
 
   const { data: revenueData } = useQuery({
     queryKey: ['reports', 'revenue'],
-    queryFn: () =>
-      fetch('/api/dashboard/revenue-stats?days=30')
-        .then((r) => r.json())
-        .then((d) => d.data || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data, error } = await dashApi.revenueChart(30);
+      if (error) return [];
+      return data || [];
+    },
   });
 
   const { data: appointmentData } = useQuery({
     queryKey: ['reports', 'appointments'],
-    queryFn: () =>
-      fetch('/api/dashboard/appointment-stats?days=30')
-        .then((r) => r.json())
-        .then((d) => d.data || [])
-        .catch(() => []),
+    queryFn: async () => {
+      const { data, error } = await dashApi.appointmentChart(30);
+      if (error) return [];
+      return data || [];
+    },
   });
 
   const { data: patientStats } = useQuery({
     queryKey: ['reports', 'patients'],
-    queryFn: () =>
-      fetch('/api/dashboard/patient-stats')
-        .then((r) => r.json())
-        .then((d) => d.data || [])
-        .catch(() => []),
+    queryFn: async () => {
+      // No dedicated patient-stats API; return empty for now
+      return [];
+    },
   });
 
   return (

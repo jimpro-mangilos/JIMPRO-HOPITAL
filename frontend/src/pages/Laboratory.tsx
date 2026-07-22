@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { laboratory as labApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,12 +26,10 @@ export default function Laboratory() {
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['lab-requests', statusFilter],
-    queryFn: () => {
-      const params = statusFilter ? `?status=${statusFilter}` : '';
-      return fetch(`/api/laboratory${params}`)
-        .then((r) => r.json())
-        .then((d) => d.data || d.labRequests || [])
-        .catch(() => []);
+    queryFn: async () => {
+      const { data, error } = await labApi.requests.list(statusFilter || undefined);
+      if (error) return [];
+      return data || [];
     },
   });
 
@@ -43,18 +42,13 @@ export default function Laboratory() {
   });
 
   const addResultMutation = useMutation({
-    mutationFn: ({ requestId, data }: { requestId: string; data: any }) =>
-      fetch(`/api/laboratory/${requestId}/results`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          value: parseFloat(data.value),
-          normalMin: data.normalMin ? parseFloat(data.normalMin) : undefined,
-          normalMax: data.normalMax ? parseFloat(data.normalMax) : undefined,
-          isAbnormal: data.normalMin && data.normalMax && (parseFloat(data.value) < parseFloat(data.normalMin) || parseFloat(data.value) > parseFloat(data.normalMax)),
-        }),
-      }),
+    mutationFn: async ({ requestId, data: resultData }: { requestId: string; data: any }) => {
+      const value = parseFloat(resultData.value);
+      const normalMin = resultData.normalMin ? parseFloat(resultData.normalMin) : undefined;
+      const normalMax = resultData.normalMax ? parseFloat(resultData.normalMax) : undefined;
+      const isAbnormal = normalMin != null && normalMax != null && (value < normalMin || value > normalMax);
+      await labApi.requests.addResult({ ...resultData, labRequestId: requestId, value, normalMin, normalMax, isAbnormal });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lab-requests'] });
       toast({ title: 'Résultat ajouté', variant: 'success' });
@@ -64,12 +58,8 @@ export default function Laboratory() {
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      fetch(`/api/laboratory/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      }),
+    mutationFn: async ({ id, status }: { id: string; status: string }) =>
+      labApi.requests.updateStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lab-requests'] });
       toast({ title: 'Statut mis à jour', variant: 'success' });

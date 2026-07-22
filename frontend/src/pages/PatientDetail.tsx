@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { patients as patientsApi } from '@/lib/supabase-api';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,42 +47,86 @@ export default function PatientDetail() {
 
   const { data: patient, isLoading } = useQuery<Patient>({
     queryKey: ['patient', id],
-    queryFn: () => fetch(`/api/patients/${id}`).then((r) => r.json()),
+    queryFn: async () => {
+      const { data, error } = await patientsApi.getById(id!);
+      if (error) throw error;
+      return data;
+    },
   });
 
   const { data: appointments } = useQuery({
     queryKey: ['patient', id, 'appointments'],
-    queryFn: () => fetch(`/api/patients/${id}/appointments`).then((r) => r.json()).then((d) => d.data || d.appointments || []),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*, patient:patients(firstName,lastName), staff:staff(firstName,lastName)')
+        .eq('patientId', id)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
     enabled: tab === 'appointments',
   });
 
   const { data: consultations } = useQuery({
     queryKey: ['patient', id, 'consultations'],
-    queryFn: () => fetch(`/api/patients/${id}/consultations`).then((r) => r.json()).then((d) => d.data || d.consultations || []),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('consultations')
+        .select('*, patient:patients(firstName,lastName), staff:staff(firstName,lastName)')
+        .eq('patientId', id)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
     enabled: tab === 'consultations',
   });
 
   const { data: prescriptions } = useQuery({
     queryKey: ['patient', id, 'prescriptions'],
-    queryFn: () => fetch(`/api/patients/${id}/prescriptions`).then((r) => r.json()).then((d) => d.data || d.prescriptions || []),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('*, medication:medications(name)')
+        .eq('patientId', id)
+        .order('createdAt', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
     enabled: tab === 'prescriptions',
   });
 
   const { data: labResults } = useQuery({
     queryKey: ['patient', id, 'lab-results'],
-    queryFn: () => fetch(`/api/patients/${id}/lab-requests`).then((r) => r.json()).then((d) => d.data || d.labRequests || []),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('lab_requests')
+        .select('*, patient:patients(firstName,lastName), results:lab_results(*)')
+        .eq('patientId', id)
+        .order('requestedAt', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
     enabled: tab === 'lab',
   });
 
   const { data: invoices } = useQuery({
     queryKey: ['patient', id, 'invoices'],
-    queryFn: () => fetch(`/api/patients/${id}/invoices`).then((r) => r.json()).then((d) => d.data || d.invoices || []),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('invoices').select('*').eq('patientId', id).order('issuedAt', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
     enabled: tab === 'invoices',
   });
 
   const { data: hospitalizations } = useQuery({
     queryKey: ['patient', id, 'hospitalizations'],
-    queryFn: () => fetch(`/api/patients/${id}/hospitalizations`).then((r) => r.json()).then((d) => d.data || d.hospitalizations || []),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hospitalizations').select('*').eq('patientId', id).order('admissionDate', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
     enabled: tab === 'hospitalizations',
   });
 

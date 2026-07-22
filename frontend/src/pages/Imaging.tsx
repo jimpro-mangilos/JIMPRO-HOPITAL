@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { imaging as imagingApi } from '@/lib/supabase-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -23,12 +24,10 @@ export default function Imaging() {
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['imaging-requests', statusFilter],
-    queryFn: () => {
-      const params = statusFilter ? `?status=${statusFilter}` : '';
-      return fetch(`/api/imaging/requests${params}`)
-        .then((r) => r.json())
-        .then((d) => d.data || d.imagingRequests || [])
-        .catch(() => []);
+    queryFn: async () => {
+      const { data, error } = await imagingApi.requests.list(statusFilter || undefined);
+      if (error) return [];
+      return data || [];
     },
   });
 
@@ -39,12 +38,9 @@ export default function Imaging() {
   });
 
   const addResultMutation = useMutation({
-    mutationFn: ({ requestId, data }: { requestId: string; data: any }) =>
-      fetch(`/api/imaging/requests/${requestId}/result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ requestId, data: resultData }: { requestId: string; data: any }) => {
+      await imagingApi.requests.addResult({ ...resultData, imagingRequestId: requestId });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['imaging-requests'] });
       toast({ title: 'Résultat enregistré', variant: 'success' });
@@ -55,12 +51,8 @@ export default function Imaging() {
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      fetch(`/api/imaging/requests/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      }),
+    mutationFn: async ({ id, status }: { id: string; status: string }) =>
+      imagingApi.requests.updateStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['imaging-requests'] });
       toast({ title: 'Statut mis à jour', variant: 'success' });
