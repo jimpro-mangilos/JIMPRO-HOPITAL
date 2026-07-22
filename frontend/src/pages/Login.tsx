@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '@/store/authStore';
+import { signIn } from '@/lib/supabase-api';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuthStore();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -24,33 +23,20 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const { user } = await signIn(email, password);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Échec de la connexion');
-      }
-
-      login(data.user, data.token);
       toast({
         title: 'Connexion réussie',
-        description: `Bienvenue, ${data.user.staff?.firstName || data.user.email}`,
+        description: `Bienvenue, ${user.staff?.firstName || user.email}`,
         variant: 'success',
       });
       navigate('/');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur de connexion';
+    } catch (err: any) {
+      const message = err.message === 'Invalid login credentials'
+        ? 'Email ou mot de passe incorrect'
+        : err.message || 'Erreur de connexion';
       setError(message);
-      toast({
-        title: 'Erreur',
-        description: message,
-        variant: 'error',
-      });
+      toast({ title: 'Erreur', description: message, variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -77,18 +63,9 @@ export default function Login() {
             Plateforme intégrée pour la gestion complète de votre établissement de santé
           </p>
           <div className="mt-12 grid grid-cols-3 gap-6 text-center">
-            <div>
-              <p className="text-3xl font-bold">24/7</p>
-              <p className="text-sm text-white/70">Disponible</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold">100%</p>
-              <p className="text-sm text-white/70">Sécurisé</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold">FR</p>
-              <p className="text-sm text-white/70">Français</p>
-            </div>
+            <div><p className="text-3xl font-bold">24/7</p><p className="text-sm text-white/70">Disponible</p></div>
+            <div><p className="text-3xl font-bold">100%</p><p className="text-sm text-white/70">Sécurisé</p></div>
+            <div><p className="text-3xl font-bold">CD</p><p className="text-sm text-white/70">Congolais</p></div>
           </div>
         </div>
       </div>
@@ -103,70 +80,31 @@ export default function Login() {
               </div>
             </div>
             <CardTitle className="text-2xl font-bold">Connexion</CardTitle>
-            <CardDescription>
-              Connectez-vous pour accéder à votre espace
-            </CardDescription>
+            <CardDescription>Connectez-vous pour accéder à votre espace</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-                  {error}
-                </div>
+                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>
               )}
-
               <div className="space-y-2">
                 <Label htmlFor="email" required>Email</Label>
                 <div className="relative">
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="votre@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    leftIcon={<Mail className="h-4 w-4" />}
-                  />
+                  <Input id="email" type="email" placeholder="votre@email.com" value={email}
+                    onChange={(e) => setEmail(e.target.value)} required leftIcon={<Mail className="h-4 w-4" />} />
                 </div>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="password" required>Mot de passe</Label>
                 <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
+                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="••••••••"
+                    value={password} onChange={(e) => setPassword(e.target.value)} required
                     leftIcon={<Lock className="h-4 w-4" />}
-                    rightIcon={
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="pointer-events-auto"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    }
-                  />
+                    rightIcon={<button type="button" onClick={() => setShowPassword(!showPassword)} className="pointer-events-auto">
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>} />
                 </div>
               </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 text-gray-600 cursor-pointer">
-                  <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                  Se souvenir de moi
-                </label>
-                <Link to="/forgot-password" className="text-primary-600 hover:underline font-medium">
-                  Mot de passe oublié ?
-                </Link>
-              </div>
-
-              <Button type="submit" className="w-full" size="lg" loading={loading}>
-                Se connecter
-              </Button>
+              <Button type="submit" className="w-full" size="lg" loading={loading}>Se connecter</Button>
             </form>
           </CardContent>
         </Card>

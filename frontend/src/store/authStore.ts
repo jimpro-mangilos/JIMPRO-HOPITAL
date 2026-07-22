@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { supabase } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 interface StaffInfo {
   id: string;
@@ -10,7 +12,7 @@ interface StaffInfo {
   department?: string;
 }
 
-interface User {
+interface AppUser {
   id: string;
   email: string;
   role: string;
@@ -18,43 +20,58 @@ interface User {
 }
 
 interface AuthState {
-  user: User | null;
-  token: string | null;
+  user: AppUser | null;
+  session: any;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
-  logout: () => void;
+  isLoading: boolean;
+  setUser: (user: AppUser | null) => void;
+  logout: () => Promise<void>;
   initialize: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  token: null,
+  session: null,
   isAuthenticated: false,
+  isLoading: true,
 
-  login: (user: User, token: string) => {
-    localStorage.setItem('jimpro-token', token);
-    localStorage.setItem('jimpro-user', JSON.stringify(user));
-    set({ user, token, isAuthenticated: true });
+  setUser: (user: AppUser | null) => {
+    set({ user, isAuthenticated: !!user });
   },
 
-  logout: () => {
-    localStorage.removeItem('jimpro-token');
-    localStorage.removeItem('jimpro-user');
-    set({ user: null, token: null, isAuthenticated: false });
+  logout: async () => {
+    await supabase.auth.signOut();
+    set({ user: null, session: null, isAuthenticated: false });
   },
 
-  initialize: () => {
-    const token = localStorage.getItem('jimpro-token');
-    const userStr = localStorage.getItem('jimpro-user');
-    if (token && userStr) {
-      try {
-        const user = JSON.parse(userStr) as User;
-        set({ user, token, isAuthenticated: true });
-      } catch {
-        localStorage.removeItem('jimpro-token');
-        localStorage.removeItem('jimpro-user');
-        set({ user: null, token: null, isAuthenticated: false });
+  initialize: async () => {
+    set({ isLoading: true });
+
+    // Écouter les changements d'auth Supabase
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        // Récupérer le profil utilisateur complet
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*, staff(*)')
+          .eq('id', session.user.id)
+          .single();
+
+        set({
+          user: userData as AppUser,
+          session,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      } else {
+        set({ user: null, session: null, isAuthenticated: false, isLoading: false });
       }
+    });
+
+    // Vérifier la session existante
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      set({ isLoading: false });
     }
   },
 }));
