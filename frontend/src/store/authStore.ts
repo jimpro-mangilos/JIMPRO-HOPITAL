@@ -76,9 +76,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     });
 
-    // Vérifier la session existante
+    // Vérifier la session existante (force immediate update)
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    if (session) {
+      try {
+        const { data: userData } = await supabase.from('users').select('*, staff(*)').eq('id', session.user.id).single();
+        if (userData) { set({ user: userData as AppUser, session, isAuthenticated: true, isLoading: false }); return; }
+      } catch (_) {}
+      set({ user: { id: session.user.id, email: session.user.email || '', role: 'ACCUEIL' }, session, isAuthenticated: true, isLoading: false });
+    } else {
       set({ isLoading: false });
     }
   },
