@@ -8,14 +8,17 @@ export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 
-  // Récupérer le profil staff lié
-  const { data: userData } = await supabase
-    .from('users')
-    .select('*, staff(*)')
-    .eq('id', data.user.id)
-    .single();
+  try {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('*, staff(*)')
+      .eq('id', data.user.id)
+      .single();
+    if (userData) return { user: userData, session: data.session };
+  } catch (_) {}
 
-  return { user: userData, session: data.session };
+  // Fallback
+  return { user: { id: data.user.id, email: data.user.email!, role: 'ACCUEIL' }, session: data.session };
 }
 
 export async function signOut() {

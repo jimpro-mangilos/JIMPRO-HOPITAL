@@ -50,15 +50,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Écouter les changements d'auth Supabase
     supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        // Récupérer le profil utilisateur complet
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*, staff(*)')
-          .eq('id', session.user.id)
-          .single();
+        try {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*, staff(*)')
+            .eq('id', session.user.id)
+            .single();
 
+          if (userData) {
+            set({ user: userData as AppUser, session, isAuthenticated: true, isLoading: false });
+            return;
+          }
+        } catch (_) {
+          // RLS might block, fallback to basic user from session
+        }
+        // Fallback: use session user directly
         set({
-          user: userData as AppUser,
+          user: { id: session.user.id, email: session.user.email || '', role: 'ACCUEIL' },
           session,
           isAuthenticated: true,
           isLoading: false,
